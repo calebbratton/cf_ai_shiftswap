@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cf-ai-scheduler",
+  "name": "cf-ai-shiftswap",
   "main": "src/server.ts",
   "compatibility_date": "2026-06-11",
   "compatibility_flags": ["nodejs_compat"],
@@ -13,17 +13,17 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/agents/*"]
   },
-  // One SchedulerAgent Durable Object per user (per browser in the demo).
+  // One TeamAgent Durable Object per team (per browser in the demo).
   "durable_objects": {
-    "bindings": [{ "class_name": "SchedulerAgent", "name": "SchedulerAgent" }]
+    "bindings": [{ "class_name": "TeamAgent", "name": "TeamAgent" }]
   },
-  "migrations": [{ "new_sqlite_classes": ["SchedulerAgent"], "tag": "v1" }],
-  // Durable propose -> wait for approval -> re-check -> book -> remind flow.
+  "migrations": [{ "new_sqlite_classes": ["TeamAgent"], "tag": "v1" }],
+  // Durable offer -> wait for acceptance -> manager approval -> re-check -> apply flow.
   "workflows": [
     {
-      "name": "booking-workflow",
-      "binding": "BOOKING_WORKFLOW",
-      "class_name": "BookingWorkflow"
+      "name": "swap-workflow",
+      "binding": "SWAP_WORKFLOW",
+      "class_name": "SwapWorkflow"
     }
   ]
 }
