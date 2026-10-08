@@ -4,24 +4,26 @@
   "main": "src/server.ts",
   "compatibility_date": "2026-06-11",
   "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // Workers AI (Llama 3.3). There is no local model runtime, so dev uses the remote binding.
   "ai": { "binding": "AI", "remote": true },
+  // React UI built by Vite, served as static assets. Agent traffic goes to the Worker first.
   "assets": {
     "directory": "./public",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/agents/*", "/oauth/*"]
+    "run_worker_first": ["/agents/*"]
   },
+  // One SchedulerAgent Durable Object per user (per browser in the demo).
   "durable_objects": {
-    "bindings": [
-      {
-        "class_name": "ChatAgent",
-        "name": "ChatAgent"
-      }
-    ]
+    "bindings": [{ "class_name": "SchedulerAgent", "name": "SchedulerAgent" }]
   },
-  "migrations": [
+  "migrations": [{ "new_sqlite_classes": ["SchedulerAgent"], "tag": "v1" }],
+  // Durable propose -> wait for approval -> re-check -> book -> remind flow.
+  "workflows": [
     {
-      "new_sqlite_classes": ["ChatAgent"],
-      "tag": "v1"
+      "name": "booking-workflow",
+      "binding": "BOOKING_WORKFLOW",
+      "class_name": "BookingWorkflow"
     }
   ]
 }
