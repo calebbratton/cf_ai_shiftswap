@@ -179,3 +179,38 @@ export function parseTime(time: string): [number, number] {
   if (h > 24 || min > 59) throw new Error(`Invalid time "${time}"`);
   return [h, min];
 }
+
+const WEEKDAY_NAMES = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday"
+];
+
+/**
+ * Turn what a model or person might pass as a date into YYYY-MM-DD:
+ * an ISO date, "today", "tomorrow", or a weekday name with an optional
+ * "this/next/upcoming" ("friday" = the next Friday after today).
+ * Returns null when it can't tell.
+ */
+export function resolveDate(input: string, today: string): string | null {
+  const raw = input.trim().toLowerCase();
+  const iso = /\d{4}-\d{2}-\d{2}/.exec(raw)?.[0];
+  if (iso) return isDate(iso) ? iso : null;
+  if (raw === "today") return today;
+  if (raw === "tomorrow") return addDays(today, 1);
+  const words = raw
+    .replace(/[^a-z ]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const day = words.find((w) =>
+    WEEKDAY_NAMES.some((n) => n.startsWith(w) && w.length >= 3)
+  );
+  if (!day) return null;
+  const target = WEEKDAY_NAMES.findIndex((n) => n.startsWith(day));
+  const ahead = (target - weekday(today) + 7) % 7 || 7;
+  return addDays(today, ahead);
+}

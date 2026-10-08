@@ -2,15 +2,35 @@ import { tool } from "ai";
 import { z } from "zod";
 import { SHIFT_DEFS, type WorkShift } from "./rotation";
 import { MANAGER, OPEN_STATUSES, type Actor } from "./shared";
-import { findSwapCandidates, flexOn, shiftOn } from "./swaps";
-import { addDays, formatDate, isDate, localDate } from "./time";
+import { checkEligibility, findSwapCandidates, flexOn, shiftOn } from "./swaps";
+import { addDays, formatDate, localDate, resolveDate } from "./time";
 import type { TeamAgent } from "./team-agent";
 
 const dateSchema = z
   .string()
   .describe(
-    "Local date as YYYY-MM-DD, taken from the date lookup in the system prompt"
+    'Date as YYYY-MM-DD from the date lookup in the system prompt (a day name like "friday" also works)'
   );
+
+/**
+ * Llama sometimes sends an array argument as a JSON string
+ * ('["2026-10-12"]') or a comma-separated list. Accept all three.
+ */
+export function coerceList(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      // fall through to splitting
+    }
+  }
+  return trimmed
+    .split(",")
+    .map((v) => v.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+}
 
 const shiftLabel = (s: string) =>
   s === "-" ? "off" : SHIFT_DEFS[s as WorkShift].label;
@@ -39,11 +59,16 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
     return m ? { member: m } : { error: "Unknown member." };
   }
 
-  function badDate(date: string) {
-    if (!isDate(date)) return `"${date}" is not a YYYY-MM-DD date.`;
-    const today = localDate(Date.now(), agent.getRules().timezone);
-    if (date < today) return "That date is in the past.";
-    return null;
+  function today() {
+    return localDate(Date.now(), agent.getRules().timezone);
+  }
+
+  /** Resolves "2026-10-16", "friday", "tomorrow"... to a future-or-today date. */
+  function toDate(raw: string): { date: string } | { error: string } {
+    const date = resolveDate(raw, today());
+    if (!date) return { error: `Couldn't read "${raw}" as a date.` };
+    if (date < today()) return { error: "That date is in the past." };
+    return { date };
   }
 
   return {
@@ -58,7 +83,7 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
         startDate: dateSchema
           .optional()
           .describe("First date, YYYY-MM-DD; defaults to today"),
-        days: z
+        days: z.coerce
           .number()
           .int()
           .min(1)
@@ -68,10 +93,7 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
       }),
       execute: async ({ memberName, startDate, days }) => {
         const roster = agent.getRoster();
-        const start =
-          startDate && isDate(startDate)
-            ? startDate
-            : localDate(Date.now(), roster.rules.timezone);
+        const start = (startDate && resolveDate(startDate, today())) || today();
         const dates = Array.from({ length: days ?? 7 }, (_, i) =>
           addDays(start, i)
         );
@@ -99,7 +121,7 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
       description:
         "Record dates when someone is willing to pick up extra shifts (or clear them). Coworkers marked flex are offered swaps first.",
       inputSchema: z.object({
-        dates: z.array(dateSchema).min(1).max(14),
+        dates: z.preprocess(coerceList, z.array(dateSchema).min(1).max(14)),
         shift: z
           .enum(["day", "night", "either", "none"])
           .describe('"none" clears flex for those dates'),
@@ -122,12 +144,14 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
         const roster = agent.getRoster();
         const saved: string[] = [];
         const skipped: string[] = [];
-        for (const d of dates) {
-          const err = badDate(d);
-          if (err) {
-            skipped.push(`${d}: ${err}`);
+        const warnings: string[] = [];
+        for (const raw of dates) {
+          const r = toDate(raw);
+          if ("error" in r) {
+            skipped.push(`${raw}: ${r.error}`);
             continue;
           }
+          const d = r.date;
           const working = shiftOn(roster, s.member.id, d);
           if (working !== "-" && shifts.length > 0) {
             skipped.push(
@@ -137,8 +161,17 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
           }
           agent.setFlexAvailability(s.member.id, d, shifts);
           saved.push(formatDate(d));
+          // Saved either way, but say so if the rules would block it.
+          for (const sh of shifts) {
+            const e = checkEligibility(agent.getRoster(), s.member.id, d, sh);
+            if (!e.ok) {
+              warnings.push(
+                `${formatDate(d)} ${SHIFT_DEFS[sh].label}: won't be offered, ${e.reason}`
+              );
+            }
+          }
         }
-        return { member: s.member.name, flex: shift, saved, skipped };
+        return { member: s.member.name, flex: shift, saved, skipped, warnings };
       }
     }),
 
@@ -152,11 +185,12 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
           .optional()
           .describe("Whose shift; omit for the speaker")
       }),
-      execute: async ({ date, memberName }) => {
+      execute: async ({ date: rawDate, memberName }) => {
         const s = subject(memberName);
         if ("error" in s) return s;
-        const err = badDate(date);
-        if (err) return { error: err };
+        const r0 = toDate(rawDate);
+        if ("error" in r0) return r0;
+        const date = r0.date;
         try {
           const r = findSwapCandidates(agent.getRoster(), s.member.id, date);
           return {
@@ -188,11 +222,12 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
           .describe("Optional short note for coworkers"),
         memberName: z.string().optional().describe("Manager only: whose shift")
       }),
-      execute: async ({ date, note, memberName }) => {
+      execute: async ({ date: rawDate, note, memberName }) => {
         const s = subject(memberName);
         if ("error" in s) return s;
-        const err = badDate(date);
-        if (err) return { error: err };
+        const r0 = toDate(rawDate);
+        if ("error" in r0) return r0;
+        const date = r0.date;
         try {
           const r = await agent.createSwapRequest(s.member.id, date, note);
           if (!r.ok) {

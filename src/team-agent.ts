@@ -4,12 +4,15 @@ import { createWorkersAI } from "workers-ai-provider";
 import {
   convertToModelMessages,
   pruneMessages,
+  simulateStreamingMiddleware,
   stepCountIs,
   streamText,
+  wrapLanguageModel,
   type UIMessage
 } from "ai";
 import { buildSystemPrompt } from "./prompt";
 import { buildTools } from "./tools";
+import { nextStepTools } from "./step-policy";
 import { seedDemoTeam } from "./demo";
 import {
   SHIFT_DEFS,
@@ -156,7 +159,27 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
     const workersai = createWorkersAI({ binding: this.env.AI });
 
     const result = streamText({
-      model: workersai(MODEL, { sessionAffinity: this.sessionAffinity }),
+      // Workers AI's streaming mode for Llama 3.3 duplicates tool-call
+      // argument fragments (once as strings, once coerced to numbers), so
+      // the arguments arrive unparseable and every tool call fails with {}.
+      // Non-streaming responses are correct: generate each step whole and
+      // replay it as a stream.
+      model: wrapLanguageModel({
+        model: workersai(MODEL, { sessionAffinity: this.sessionAffinity }),
+        middleware: [
+          // Workers AI rejects `tools: []`; omit the field when the step
+          // policy offers no tools, so the model has to reply in text.
+          {
+            specificationVersion: "v3",
+            transformParams: async ({ params }) =>
+              params.tools?.length === 0
+                ? { ...params, tools: undefined, toolChoice: undefined }
+                : params
+          },
+          simulateStreamingMiddleware()
+        ]
+      }),
+      maxOutputTokens: 1024,
       system: buildSystemPrompt({
         now: Date.now(),
         actor,
@@ -169,11 +192,17 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
         reasoning: "before-last-message"
       }),
       tools: buildTools(this, actor),
-      stopWhen: stepCountIs(5),
+      prepareStep: ({ steps }) => ({ activeTools: nextStepTools(steps) }),
+      stopWhen: stepCountIs(4),
       abortSignal: options?.abortSignal
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse({
+      onError: (error) => {
+        console.error("chat turn failed", error);
+        return "Sorry, the assistant hit an error. Please try again.";
+      }
+    });
   }
 
   /** The chat is a team channel: each user message carries who sent it. */

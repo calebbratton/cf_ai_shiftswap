@@ -4,6 +4,7 @@ import {
   daysBetween,
   formatDate,
   isDate,
+  resolveDate,
   localDate,
   weekStart,
   weekday,
@@ -78,5 +79,32 @@ describe("local dates", () => {
     expect(isDate("2026-10-16")).toBe(true);
     expect(isDate("2026-02-30")).toBe(false);
     expect(isDate("next friday")).toBe(false);
+  });
+});
+
+describe("resolveDate", () => {
+  const today = "2026-10-08"; // Thursday
+
+  it("passes ISO dates through and rejects impossible ones", () => {
+    expect(resolveDate("2026-10-16", today)).toBe("2026-10-16");
+    expect(resolveDate("2026-02-30", today)).toBeNull();
+  });
+
+  it("resolves today and tomorrow", () => {
+    expect(resolveDate("today", today)).toBe("2026-10-08");
+    expect(resolveDate("Tomorrow", today)).toBe("2026-10-09");
+  });
+
+  it("resolves weekday names to the next occurrence after today", () => {
+    expect(resolveDate("friday", today)).toBe("2026-10-09");
+    expect(resolveDate("this Friday", today)).toBe("2026-10-09");
+    expect(resolveDate("upcoming fri", today)).toBe("2026-10-09");
+    expect(resolveDate("monday", today)).toBe("2026-10-12");
+    expect(resolveDate("thursday", today)).toBe("2026-10-15"); // not today
+  });
+
+  it("returns null for things it can't read", () => {
+    expect(resolveDate("someday", today)).toBeNull();
+    expect(resolveDate("", today)).toBeNull();
   });
 });

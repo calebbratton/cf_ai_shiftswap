@@ -142,3 +142,4 @@ dist
 .wrangler
 .dev.vars
 
+.probe/

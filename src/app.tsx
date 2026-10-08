@@ -362,6 +362,94 @@ function Inbox({
   );
 }
 
+// ── Quick actions (same agent methods the chat tools use) ─────────────
+
+function QuickActions({
+  state,
+  memberId,
+  call
+}: {
+  state: TeamState;
+  memberId: string;
+  call: (fn: string, ...args: unknown[]) => Promise<void>;
+}) {
+  const row = state.grid.rows.find((r) => r.memberId === memberId);
+  const upcoming = state.grid.dates
+    .map((date, i) => ({ date, shift: row?.shifts[i] ?? "-" }))
+    .filter((d) => d.date >= state.today);
+  const myShifts = upcoming.filter((d) => d.shift !== "-");
+  const daysOff = upcoming.filter((d) => d.shift === "-");
+  const [coverDate, setCoverDate] = useState("");
+  const [flexDate, setFlexDate] = useState("");
+  const [flexShift, setFlexShift] = useState<"D" | "N">("D");
+  const cover = coverDate || myShifts[0]?.date || "";
+  const flex = flexDate || daysOff[0]?.date || "";
+  const selectClass =
+    "rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900";
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-zinc-200 p-3 text-xs dark:border-zinc-800">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">Need cover?</span>
+        <select
+          value={cover}
+          onChange={(e) => setCoverDate(e.target.value)}
+          className={selectClass}
+          aria-label="Shift to give away"
+        >
+          {myShifts.map((d) => (
+            <option key={d.date} value={d.date}>
+              {shortDate(d.date)} · {SHIFT_NAME[d.shift as WorkShift]}
+            </option>
+          ))}
+        </select>
+        <Btn
+          tone="primary"
+          disabled={!cover}
+          onClick={() => call("requestSwapFromUI", memberId, cover)}
+        >
+          Request cover
+        </Btn>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">Can pick up?</span>
+        <select
+          value={flex}
+          onChange={(e) => setFlexDate(e.target.value)}
+          className={selectClass}
+          aria-label="Day you could work"
+        >
+          {daysOff.map((d) => (
+            <option key={d.date} value={d.date}>
+              {shortDate(d.date)}
+            </option>
+          ))}
+        </select>
+        <select
+          value={flexShift}
+          onChange={(e) => setFlexShift(e.target.value as "D" | "N")}
+          className={selectClass}
+          aria-label="Shift type"
+        >
+          <option value="D">day</option>
+          <option value="N">night</option>
+        </select>
+        <Btn
+          disabled={!flex}
+          onClick={() => {
+            const current = row?.flex[state.grid.dates.indexOf(flex)] ?? [];
+            void call("setFlexFromUI", memberId, flex, [
+              ...new Set([...current, flexShift])
+            ]);
+          }}
+        >
+          Mark me available
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
 function Section(props: {
   title: string;
   empty: string;
@@ -419,6 +507,7 @@ function ChatMessage({
         {tools.map((t) => (
           <div
             key={t.toolCallId}
+            title={t.state === "output-error" ? t.errorText : undefined}
             className="mb-1 inline-flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800"
           >
             ⚙ {getToolName(t)}
@@ -474,7 +563,14 @@ export default function App() {
     if (connected) agent.call("hello", [BROWSER_TZ]).catch(console.error);
   }, [connected, agent]);
 
-  const { messages, sendMessage, status, stop, clearHistory } = useAgentChat({
+  const {
+    messages,
+    sendMessage,
+    status,
+    stop,
+    clearHistory,
+    error: chatError
+  } = useAgentChat({
     agent
   });
   const busy = status === "streaming" || status === "submitted";
@@ -630,6 +726,10 @@ export default function App() {
               : "As manager you approve swaps that a coworker has accepted. Switch “Acting as” to play each person."}
           </p>
 
+          {state && me && (
+            <QuickActions state={state} memberId={me.id} call={call} />
+          )}
+
           <div className="mt-5 hidden lg:block">
             {state && <Inbox state={state} actor={actor} call={call} />}
           </div>
@@ -679,6 +779,11 @@ export default function App() {
               ))}
               {status === "submitted" && (
                 <p className="text-xs text-zinc-400">Thinking…</p>
+              )}
+              {chatError && (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  The assistant hit an error: {chatError.message}. Try again.
+                </p>
               )}
               <div ref={endRef} />
             </div>
