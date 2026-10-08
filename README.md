@@ -1,245 +1,175 @@
-# Agent Starter
+# cf_ai_shiftswap: AI shift-swap assistant on Cloudflare
 
-![npm i agents command](./npm-agents-banner.svg)
+**Live demo:** _deploying, link coming shortly_
 
-<a href="https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/agents-starter"><img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare"/></a>
+A chat assistant for shift workers (nurses, techs, anyone on a rotation). You
+mark days you'd pick up extra shifts, and when you need a day off you just ask:
 
-A starter template for building AI chat agents on Cloudflare, powered by the [Agents SDK](https://developers.cloudflare.com/agents/).
+> "Can you find someone to trade shifts with me this Friday?"
 
-Uses Workers AI (no API key required), with tools for weather, timezone detection, calculations with approval, task scheduling, and vision (image input).
+The agent works out which shift that is and finds coworkers who can legally
+cover it (same role, not already working, enough rest, under the weekly cap).
+It offers the shift to them with flex-available people ranked first, waits for
+someone to accept, and routes it to the manager for approval. Then it
+re-checks everything and updates the roster.
 
-## Quick start
+No sign-in: every browser gets its own demo team of seven on real rotation
+patterns. Use the **Acting as** switcher to play the requester, the coworker
+who accepts, and the manager.
+
+## Try it in 60 seconds
+
+1. Open the demo. You're **Alex (RN)**, who works this Friday.
+2. In the chat, click **"Can you find someone to trade shifts with me this
+   Friday?"** (or click Alex's Friday cell in the roster). The assistant offers
+   the shift to Dev (marked flex for Friday, so ranked first), Ben and Hana. It
+   also explains why the others were excluded: Cara would get 0h rest after her
+   night shift, Eve is a Tech rather than an RN, and Finn is already working.
+3. Switch **Acting as** to **Dev** and click **Accept** in the inbox.
+4. Switch to **Manager** and click **Approve**. The roster updates (an orange
+   outline marks a swapped shift) and the assistant announces it in the team chat.
+
+Also try: "I can pick up day shifts next Monday and Tuesday" (flex), "Who
+could cover Alex's Friday shift?" as the manager, or decline/cancel a request.
+
+## Rubric mapping
+
+| Requirement                 | How it's met                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **LLM**                     | Llama 3.3 70B on Workers AI (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) through `workers-ai-provider` and the AI SDK's `streamText` with six tools ([src/tools.ts](src/tools.ts)).                                                                                                                                                                                             |
+| **Workflow / coordination** | `TeamAgent` (an `AIChatAgent` Durable Object, one per team) coordinates `SwapWorkflow` (an `AgentWorkflow`, one per request). The workflow waits durably for a coworker's acceptance (`step.waitForEvent`) and the manager's approval (`waitForApproval` / `approveWorkflow` / `rejectWorkflow`). `this.schedule()` expires stale offers and sends a day-before shift reminder. |
+| **User input (chat)**       | React app served as Workers static assets: team chat via `useAgentChat`, plus a roster grid, inbox and act-as switcher driven by agent state via `useAgent`.                                                                                                                                                                                                                    |
+| **Memory / state**          | Agent SQLite tables (`members`, `overrides`, `flex`, `swap_requests`, `notices`, `settings`); `setState` mirrors a roster view to every connected client in real time; chat history is persisted by `AIChatAgent`.                                                                                                                                                              |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  UI["Browser: React<br/>roster grid · inbox · team chat"]
+  subgraph Worker["Cloudflare Worker"]
+    R["routeAgentRequest()"]
+    A["TeamAgent<br/>AIChatAgent Durable Object<br/>(one per team)"]
+    DB[("SQLite<br/>members · overrides · flex<br/>swap_requests · notices")]
+    W["SwapWorkflow<br/>(one per swap request)"]
+    S["this.schedule()<br/>offer expiry · shift reminders"]
+  end
+  AI["Workers AI<br/>Llama 3.3 70B"]
+
+  UI <-->|"WebSocket: chat + state sync + @callable RPC"| R --> A
+  A <--> DB
+  A -->|"streamText + tools"| AI
+  A -->|"runWorkflow / sendWorkflowEvent<br/>approveWorkflow / rejectWorkflow"| W
+  W -->|"step.do → agent RPC"| A
+  A --> S --> A
+```
+
+**Swap lifecycle** (one `SwapWorkflow` instance per request):
+
+```
+requestSwap tool / click on your shift
+  └─ find-candidates     agent.candidatesFor()         deterministic eligibility
+  └─ offer               agent.offerTo()               notify all eligible, schedule expiry
+  └─ wait-for-acceptance step.waitForEvent("accepted") Accept button → sendWorkflowEvent
+  └─ record-acceptance
+  └─ wait-for-approval   waitForApproval()             Approve/Decline → approve/rejectWorkflow
+  └─ recheck-and-apply   agent.applySwap()             re-check + write overrides atomically
+  └─ schedule-reminder   this.schedule(shift - 24h)
+  └─ announce            notice + chat message
+```
+
+### Code map
+
+| File                                   | What                                                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| [src/time.ts](src/time.ts)             | Timezone helpers on `Intl` only: local date ↔ UTC instant, DST gaps and overlaps                             |
+| [src/rotation.ts](src/rotation.ts)     | Rotation patterns (Pitman, Panama, DuPont, 4-on/4-off) and shift intervals                                   |
+| [src/swaps.ts](src/swaps.ts)           | Pure eligibility and ranking: role, already working, rest gap, weekly cap, flex-first                        |
+| [src/team-agent.ts](src/team-agent.ts) | `TeamAgent`: SQLite, state sync, chat turn, swap coordination, schedules                                     |
+| [src/tools.ts](src/tools.ts)           | `getSchedule`, `setFlexAvailability`, `findSwapCandidates`, `requestSwap`, `listMyRequests`, `cancelRequest` |
+| [src/prompt.ts](src/prompt.ts)         | System prompt, rebuilt every turn                                                                            |
+| [src/workflow.ts](src/workflow.ts)     | `SwapWorkflow`                                                                                               |
+| [src/demo.ts](src/demo.ts)             | Seeds the demo team around the next Friday                                                                   |
+| [src/app.tsx](src/app.tsx)             | React UI                                                                                                     |
+
+## Design notes
+
+- **Code does the date math and the rules, not the LLM.** Llama decides
+  _what_ to do (which tool, which date). Deterministic, unit-tested code
+  decides _who can_ cover a shift. The model can't invent availability: every
+  name it mentions came from a tool result. The system prompt also carries a
+  14-day lookup table ("Fri, Oct 16 = 2026-10-16") and the speaker's own
+  shifts, so the model looks dates up instead of computing them.
+- **Eligibility rules** ([src/swaps.ts](src/swaps.ts)):
+  - Same role, and not already working that day.
+  - At least `minRestHours` (10h) between the end of one shift and the start
+    of the next, checked against shifts two days either side. For example, a
+    Thursday night shift ending at 7am Friday blocks a Friday day shift.
+  - At most `maxShiftsPerWeek` (4) per Mon-Sun week.
+  - Ranking: flex-marked first, then the lightest week, then name. Every
+    exclusion comes with a reason the assistant can pass on.
+- **Schedules are patterns plus overrides.** Each member has a rotation and an
+  anchor date, and approved swaps write per-date overrides. Nothing is stored
+  per day, so the roster is correct for any date range.
+- **Offer to everyone at once, first to accept wins.** Offering one person at
+  a time is fairer but slow when the shift is only days away. Instead, every
+  eligible coworker gets the offer (best match listed first). `acceptOffer`
+  claims the request synchronously inside the Durable Object, so a second
+  accept that arrives a moment later is refused. If everyone declines, the
+  request closes early.
+- **The race re-check.** Between "Dev accepted" and "manager approved", Dev
+  may have picked up another shift. The `recheck-and-apply` step re-runs
+  eligibility and writes the overrides in one synchronous agent call, with no
+  `await` between the check and the write, so nothing can interleave. If the
+  check fails, the request closes as `failed` with the reason.
+- **Why a Workflow.** The waits last hours or days and must survive deploys
+  and Durable Object eviction. The workflow keeps track of where the request is,
+  with per-step retries. The agent stays the single owner of the data: every
+  step is an idempotent RPC into it.
+- **Two clocks for expiry.** `this.schedule()` fires `expireRequest` at the
+  real deadline (48h, or 2h before the shift, whichever is sooner) and
+  terminates the workflow. The workflow's own `waitForEvent` timeout is a
+  backstop.
+- **Timezones and DST.** All rules run on UTC instants computed from the
+  team's zone. A night shift that spans the fall-back change is 13 hours long,
+  and the tests check this.
+- **One chat per team.** The chat works like a team channel. Each user message
+  carries the speaker as metadata and is prefixed `[Name]` for the model.
+  Tools act as that person: members only for themselves, while the manager can
+  name anyone.
+
+## Run locally
 
 ```bash
-npx create-cloudflare@latest --template cloudflare/agents-starter
-cd agents-starter
 npm install
-npm run dev
+npm test            # unit tests (vitest, plain Node)
+npx tsc --noEmit    # type check
+npm run dev         # http://localhost:5173
 ```
 
-> **Cloudflare authentication is required to run locally.** This template uses
-> Workers AI with `"ai": { "remote": true }` in `wrangler.jsonc`, and Workers AI
-> has no local simulator — so `npm run dev` opens a remote proxy session against
-> Cloudflare and needs you to be authenticated. Either run `wrangler login` once
-> in an interactive terminal, or set a `CLOUDFLARE_API_TOKEN` environment
-> variable (e.g. in a `.env` file). No third-party (OpenAI/Anthropic) key is
-> needed, but a Cloudflare login is.
-
-Open [http://localhost:5173](http://localhost:5173) to see your agent in action.
-
-Try these prompts to see the different features:
-
-- **"What's the weather in Paris?"** — server-side tool (runs automatically)
-- **"What timezone am I in?"** — client-side tool (browser provides the answer)
-- **"Calculate 5000 \* 3"** — approval tool (asks you before running)
-- **"Remind me in 5 minutes to take a break"** — scheduling
-- **Drop an image and ask "What's in this image?"** — vision (image understanding)
-
-## Project structure
-
-```
-src/
-  server.ts    # Chat agent with tools and scheduling
-  app.tsx      # Chat UI built with Kumo components
-  client.tsx   # React entry point
-  styles.css   # Tailwind + Kumo styles
-```
-
-## What's included
-
-- **AI Chat** — Streaming responses powered by Workers AI via `AIChatAgent`
-- **Image input** — Drag-and-drop, paste, or click to attach images for vision-capable models
-- **Three tool patterns** — server-side auto-execute, client-side (browser), and human-in-the-loop approval
-- **Scheduling** — one-time, delayed, and recurring (cron) tasks
-- **Reasoning display** — shows model thinking as it streams, collapses when done
-- **Debug mode** — toggle in the header to inspect raw message JSON for each message
-- **Kumo UI** — Cloudflare's design system with dark/light mode
-- **Real-time** — WebSocket connection with automatic reconnection and message persistence
-
-## Making it your own
-
-### Name your project
-
-Update the name in `package.json` and `wrangler.jsonc` — the `name` in `wrangler.jsonc` becomes your deployed Worker's URL (`<name>.<subdomain>.workers.dev`).
-
-### Change the system prompt
-
-Edit the `system` string in `server.ts` to give your agent a different personality or focus area. This is the most impactful single change you can make.
-
-### Replace the demo tools with real ones
-
-The starter ships with demo tools (`getWeather` returns random data, `calculate` does basic arithmetic). Replace them with real implementations:
-
-```ts
-// In server.ts, replace a demo tool with a real API call:
-getWeather: tool({
-  description: "Get the current weather for a city",
-  inputSchema: z.object({ city: z.string() }),
-  execute: async ({ city }) => {
-    const res = await fetch(`https://api.weather.example/${city}`);
-    return res.json();
-  }
-}),
-```
-
-### Add your own tools
-
-Add new tools to the `tools` object in `server.ts`. There are three patterns:
-
-```ts
-// Auto-execute: runs on the server, no user interaction
-myTool: tool({
-  description: "...",
-  inputSchema: z.object({ /* ... */ }),
-  execute: async (input) => { /* return result */ }
-}),
-
-// Client-side: no execute function, browser provides the result
-// Handle it in app.tsx via the onToolCall callback
-browserTool: tool({
-  description: "...",
-  inputSchema: z.object({ /* ... */ })
-}),
-
-// Approval: add needsApproval to gate execution
-sensitiveTool: tool({
-  description: "...",
-  inputSchema: z.object({ /* ... */ }),
-  needsApproval: async (input) => true, // or conditional logic
-  execute: async (input) => { /* runs after approval */ }
-}),
-```
-
-### Customize scheduled task behavior
-
-When a scheduled task fires, `executeTask` runs on the server. It does its work and then uses `this.broadcast()` to notify connected clients (shown as a toast notification in the UI). Replace it with your own logic:
-
-```ts
-async executeTask(description: string, task: Schedule<string>) {
-  // Do the actual work
-  await sendEmail({ to: "user@example.com", subject: description });
-
-  // Notify connected clients
-  this.broadcast(
-    JSON.stringify({ type: "scheduled-task", description, timestamp: new Date().toISOString() })
-  );
-}
-```
-
-> **Why `broadcast()` instead of `saveMessages()`?** Injecting into chat history can cause the AI to see the notification as new context and re-trigger the same task in a loop. `broadcast()` sends a one-off event that the client displays separately from the conversation.
-
-### Remove scheduling
-
-If you don't need scheduling, remove `scheduleTask`, `getScheduledTasks`, and `cancelScheduledTask` from the tools object, the `executeTask` method, and the schedule-related imports (`getSchedulePrompt`, `scheduleSchema`, `Schedule`).
-
-### Add state beyond chat messages
-
-Use `this.setState()` and `this.state` for real-time state that syncs to all connected clients. See [Store and sync state](https://developers.cloudflare.com/agents/api-reference/store-and-sync-state/).
-
-### Add callable methods
-
-Expose agent methods as typed RPC that your client can call directly:
-
-```ts
-import { callable } from "agents";
-
-export class ChatAgent extends AIChatAgent<Env> {
-  @callable()
-  async getStats() {
-    return { messageCount: this.messages.length };
-  }
-}
-
-// Client-side:
-const stats = await agent.call("getStats");
-```
-
-See [Callable methods](https://developers.cloudflare.com/agents/api-reference/callable-methods/).
-
-### Connect to MCP servers
-
-Add external tools from MCP servers:
-
-```ts
-async onChatMessage(onFinish, options) {
-  // Connect to an MCP server
-  await this.mcp.connect("https://my-mcp-server.example/sse");
-
-  const result = streamText({
-    // ...
-    tools: {
-      ...myTools,
-      ...this.mcp.getAITools() // Include MCP tools
-    }
-  });
-}
-```
-
-See [MCP Client API](https://developers.cloudflare.com/agents/api-reference/mcp-client-api/).
-
-## Use a different AI model provider
-
-The starter uses [Workers AI](https://developers.cloudflare.com/workers-ai/) by default (no API key needed). To use a different provider:
-
-### OpenAI
-
-```bash
-npm install @ai-sdk/openai
-```
-
-```ts
-// In server.ts, replace the model:
-import { openai } from "@ai-sdk/openai";
-
-// Inside onChatMessage:
-const result = streamText({
-  model: openai("gpt-5.2")
-  // ...
-});
-```
-
-Create a `.env` file with your API key:
-
-```
-OPENAI_API_KEY=your-key-here
-```
-
-### Anthropic
-
-```bash
-npm install @ai-sdk/anthropic
-```
-
-```ts
-import { anthropic } from "@ai-sdk/anthropic";
-
-const result = streamText({
-  model: anthropic("claude-sonnet-4-20250514")
-  // ...
-});
-```
-
-Create a `.env` file with your API key:
-
-```
-ANTHROPIC_API_KEY=your-key-here
-```
+Workers AI has no local runtime, so `npm run dev` proxies the `AI` binding to
+your Cloudflare account. You need `npx wrangler login` and a workers.dev
+subdomain on the account.
 
 ## Deploy
 
 ```bash
-npm run deploy
+npx wrangler login
+npm run deploy      # vite build && wrangler deploy
 ```
 
-Your agent is live on Cloudflare's global network. Messages persist in SQLite, streams resume on disconnect, and the agent hibernates when idle.
+Everything fits the Workers Free plan: SQLite-backed Durable Objects,
+Workflows, and Workers AI within the free daily allowance.
 
-## Learn more
+## Next steps
 
-- [Agents SDK documentation](https://developers.cloudflare.com/agents/)
-- [Build a chat agent tutorial](https://developers.cloudflare.com/agents/getting-started/build-a-chat-agent/)
-- [Chat agents API reference](https://developers.cloudflare.com/agents/api-reference/chat-agents/)
-- [Workers AI models](https://developers.cloudflare.com/workers-ai/models/)
+- Two-way trades (the requester picks up one of the acceptor's shifts in
+  return) as an extra step in the same workflow.
+- Real auth that ties actors to signed-in users and teams, replacing the
+  act-as switcher.
+- Plug into a shared team roster (Shifty) instead of the demo seed. The
+  pattern + override model is designed to slot in there.
+- Email/SMS notifications from `offerTo` and `shiftReminder`.
 
-## License
+## Prompts
 
-MIT
+See [PROMPTS.md](PROMPTS.md) for the AI prompts used to build this.
