@@ -679,8 +679,19 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
       }
     }
     seedDemoTeam(this, tz, localDate(Date.now(), tz));
-    await this.saveMessages([]).catch(() => {});
     this.refreshState();
+  }
+
+  /** Same as the requestSwap tool, from a click on your own shift. */
+  @callable()
+  async requestSwapFromUI(memberId: string, date: string) {
+    if (!this.getMember(memberId)) return { ok: false, error: "Unknown member." };
+    try {
+      const r = await this.createSwapRequest(memberId, date);
+      return r.ok ? { ok: true } : { ok: false, error: r.error };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
   }
 
   @callable()

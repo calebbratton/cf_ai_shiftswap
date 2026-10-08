@@ -1,8 +1,5 @@
 @import "tailwindcss";
-@import "@cloudflare/kumo/styles/tailwind";
-@source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
 @source "../node_modules/streamdown/dist/*.js";
-@source "../node_modules/@streamdown/code/dist/*.js";
 
 html,
 body,
@@ -10,4 +7,17 @@ body,
   width: 100%;
   height: 100%;
   margin: 0;
+}
+
+body {
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: white;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #09090b;
+    color-scheme: dark;
+  }
 }
