@@ -8,7 +8,9 @@ import type { TeamAgent } from "./team-agent";
 
 const dateSchema = z
   .string()
-  .describe("Local date as YYYY-MM-DD, taken from the date lookup in the system prompt");
+  .describe(
+    "Local date as YYYY-MM-DD, taken from the date lookup in the system prompt"
+  );
 
 const shiftLabel = (s: string) =>
   s === "-" ? "off" : SHIFT_DEFS[s as WorkShift].label;
@@ -49,16 +51,30 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
       description:
         "Get the shift schedule. With memberName, one person's shifts; without it, the speaker's own (or the whole team for the manager).",
       inputSchema: z.object({
-        memberName: z.string().optional().describe("Whose schedule; omit for the speaker"),
-        startDate: dateSchema.optional().describe("First date, YYYY-MM-DD; defaults to today"),
-        days: z.number().int().min(1).max(14).optional().describe("Number of days, default 7")
+        memberName: z
+          .string()
+          .optional()
+          .describe("Whose schedule; omit for the speaker"),
+        startDate: dateSchema
+          .optional()
+          .describe("First date, YYYY-MM-DD; defaults to today"),
+        days: z
+          .number()
+          .int()
+          .min(1)
+          .max(14)
+          .optional()
+          .describe("Number of days, default 7")
       }),
       execute: async ({ memberName, startDate, days }) => {
         const roster = agent.getRoster();
-        const start = startDate && isDate(startDate)
-          ? startDate
-          : localDate(Date.now(), roster.rules.timezone);
-        const dates = Array.from({ length: days ?? 7 }, (_, i) => addDays(start, i));
+        const start =
+          startDate && isDate(startDate)
+            ? startDate
+            : localDate(Date.now(), roster.rules.timezone);
+        const dates = Array.from({ length: days ?? 7 }, (_, i) =>
+          addDays(start, i)
+        );
         let members = roster.members;
         if (memberName?.trim() || actor !== MANAGER) {
           const s = memberName?.trim()
@@ -87,13 +103,22 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
         shift: z
           .enum(["day", "night", "either", "none"])
           .describe('"none" clears flex for those dates'),
-        memberName: z.string().optional().describe("Manager only: who to set it for")
+        memberName: z
+          .string()
+          .optional()
+          .describe("Manager only: who to set it for")
       }),
       execute: async ({ dates, shift, memberName }) => {
         const s = subject(memberName);
         if ("error" in s) return s;
         const shifts: WorkShift[] =
-          shift === "day" ? ["D"] : shift === "night" ? ["N"] : shift === "either" ? ["D", "N"] : [];
+          shift === "day"
+            ? ["D"]
+            : shift === "night"
+              ? ["N"]
+              : shift === "either"
+                ? ["D", "N"]
+                : [];
         const roster = agent.getRoster();
         const saved: string[] = [];
         const skipped: string[] = [];
@@ -105,7 +130,9 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
           }
           const working = shiftOn(roster, s.member.id, d);
           if (working !== "-" && shifts.length > 0) {
-            skipped.push(`${formatDate(d)}: already working the ${shiftLabel(working)} shift`);
+            skipped.push(
+              `${formatDate(d)}: already working the ${shiftLabel(working)} shift`
+            );
             continue;
           }
           agent.setFlexAvailability(s.member.id, d, shifts);
@@ -120,7 +147,10 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
         "Preview who could cover someone's shift on a date, ranked (flex-marked first), with reasons others are excluded. Does not send anything.",
       inputSchema: z.object({
         date: dateSchema,
-        memberName: z.string().optional().describe("Whose shift; omit for the speaker")
+        memberName: z
+          .string()
+          .optional()
+          .describe("Whose shift; omit for the speaker")
       }),
       execute: async ({ date, memberName }) => {
         const s = subject(memberName);
@@ -136,7 +166,10 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
               markedFlex: c.flex,
               shiftsThatWeek: c.shiftsThisWeek
             })),
-            notEligible: r.excluded.map((e) => ({ name: e.name, why: e.reason }))
+            notEligible: r.excluded.map((e) => ({
+              name: e.name,
+              why: e.reason
+            }))
           };
         } catch (e) {
           return { error: (e as Error).message };
@@ -149,7 +182,10 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
         "Ask coworkers to take someone's shift on a date. Checks eligibility, then offers it to every eligible coworker; the first to accept goes to the manager for approval.",
       inputSchema: z.object({
         date: dateSchema,
-        note: z.string().optional().describe("Optional short note for coworkers"),
+        note: z
+          .string()
+          .optional()
+          .describe("Optional short note for coworkers"),
         memberName: z.string().optional().describe("Manager only: whose shift")
       }),
       execute: async ({ date, note, memberName }) => {
@@ -162,13 +198,15 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
           if (!r.ok) {
             return {
               error: r.error,
-              notEligible: "excluded" in r
-                ? r.excluded?.map((e) => ({ name: e.name, why: e.reason }))
-                : undefined
+              notEligible:
+                "excluded" in r
+                  ? r.excluded?.map((e) => ({ name: e.name, why: e.reason }))
+                  : undefined
             };
           }
           return {
-            status: "Offer sent. Coworkers accept in their Inbox; then the manager approves.",
+            status:
+              "Offer sent. Coworkers accept in their Inbox; then the manager approves.",
             shift: `${r.shift} on ${r.date}`,
             offeredTo: r.offeringTo
           };
@@ -183,12 +221,14 @@ export function buildTools(agent: TeamAgent, actor: Actor) {
         "List swap requests the speaker made or was offered (all recent requests for the manager).",
       inputSchema: z.object({}),
       execute: async () => {
-        const reqs = agent.getRequests(50).filter(
-          (r) =>
-            actor === MANAGER ||
-            r.requesterId === actor ||
-            r.offeredTo.includes(actor)
-        );
+        const reqs = agent
+          .getRequests(50)
+          .filter(
+            (r) =>
+              actor === MANAGER ||
+              r.requesterId === actor ||
+              r.offeredTo.includes(actor)
+          );
         return reqs.slice(0, 10).map((r) => ({
           requestId: r.id,
           what: agent.describe(r),

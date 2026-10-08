@@ -4,7 +4,12 @@ import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import { Streamdown } from "streamdown";
 import type { ShiftCode, WorkShift } from "./rotation";
-import { MANAGER, OPEN_STATUSES, type SwapRequest, type TeamState } from "./shared";
+import {
+  MANAGER,
+  OPEN_STATUSES,
+  type SwapRequest,
+  type TeamState
+} from "./shared";
 
 // ── Per-browser identity ──────────────────────────────────────────────
 
@@ -50,9 +55,12 @@ const SHIFT_NAME: Record<WorkShift, string> = { D: "day", N: "night" };
 
 const STATUS_STYLE: Record<string, string> = {
   searching: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200",
-  offered: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
-  accepted: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200",
-  approved: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+  offered:
+    "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+  accepted:
+    "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200",
+  approved:
+    "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
 };
 
 function StatusPill({ status }: { status: string }) {
@@ -75,8 +83,7 @@ function Btn(
 ) {
   const { tone = "ghost", className = "", ...rest } = props;
   const tones = {
-    primary:
-      "bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50",
+    primary: "bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50",
     ghost:
       "border border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800",
     danger:
@@ -166,7 +173,9 @@ function Roster({
                     <td
                       key={date}
                       className={`p-0.5 text-center ${
-                        i === 7 ? "border-l-2 border-zinc-300 dark:border-zinc-700" : ""
+                        i === 7
+                          ? "border-l-2 border-zinc-300 dark:border-zinc-700"
+                          : ""
                       }`}
                     >
                       <button
@@ -175,7 +184,11 @@ function Roster({
                         onClick={() =>
                           canRequest
                             ? onRequestCover(row.memberId, date)
-                            : onToggleFlex(row.memberId, date, NEXT_FLEX[key] ?? [])
+                            : onToggleFlex(
+                                row.memberId,
+                                date,
+                                NEXT_FLEX[key] ?? []
+                              )
                         }
                         title={
                           s !== "-"
@@ -195,10 +208,18 @@ function Roster({
                                 ? "border border-dashed border-emerald-500 text-emerald-700 dark:text-emerald-300"
                                 : "text-zinc-300 dark:text-zinc-700"
                         } ${row.swapped[i] ? "ring-2 ring-orange-500" : ""} ${
-                          canToggle ? "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800" : canRequest ? "cursor-pointer hover:opacity-80" : ""
+                          canToggle
+                            ? "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            : canRequest
+                              ? "cursor-pointer hover:opacity-80"
+                              : ""
                         }`}
                       >
-                        {s !== "-" ? s : flex.length ? `+${flex.join("")}` : "·"}
+                        {s !== "-"
+                          ? s
+                          : flex.length
+                            ? `+${flex.join("")}`
+                            : "·"}
                       </button>
                     </td>
                   );
@@ -241,9 +262,7 @@ function Inbox({
   const mine = state.requests.filter((r) =>
     isManager ? true : r.requesterId === actor || r.acceptorId === actor
   );
-  const notices = state.notices.filter(
-    (n) => n.to === actor || n.to === "all"
-  );
+  const notices = state.notices.filter((n) => n.to === actor || n.to === "all");
 
   return (
     <div className="space-y-3 text-sm">
@@ -273,13 +292,20 @@ function Inbox({
             <Item key={r.id}>
               <div>
                 Can you take <b>{what(r)}</b>?
-                {r.note && <div className="text-xs text-zinc-500">"{r.note}"</div>}
+                {r.note && (
+                  <div className="text-xs text-zinc-500">"{r.note}"</div>
+                )}
               </div>
               <div className="mt-1.5 flex gap-2">
-                <Btn tone="primary" onClick={() => call("acceptOffer", r.id, actor)}>
+                <Btn
+                  tone="primary"
+                  onClick={() => call("acceptOffer", r.id, actor)}
+                >
                   Accept
                 </Btn>
-                <Btn onClick={() => call("declineOffer", r.id, actor)}>Decline</Btn>
+                <Btn onClick={() => call("declineOffer", r.id, actor)}>
+                  Decline
+                </Btn>
               </div>
             </Item>
           ))}
@@ -296,14 +322,18 @@ function Inbox({
               <span>
                 {what(r)}
                 {r.acceptorId && (
-                  <span className="text-zinc-500"> → {name(r.acceptorId).split(" ")[0]}</span>
+                  <span className="text-zinc-500">
+                    {" "}
+                    → {name(r.acceptorId).split(" ")[0]}
+                  </span>
                 )}
               </span>
               <StatusPill status={r.status} />
             </div>
             {r.status === "offered" && (
               <div className="mt-1 text-xs text-zinc-500">
-                Offered to {r.offeredTo.map((id) => name(id).split(" ")[0]).join(", ")}
+                Offered to{" "}
+                {r.offeredTo.map((id) => name(id).split(" ")[0]).join(", ")}
                 {r.declinedBy.length > 0 &&
                   ` · declined: ${r.declinedBy.map((id) => name(id).split(" ")[0]).join(", ")}`}
               </div>
@@ -332,7 +362,11 @@ function Inbox({
   );
 }
 
-function Section(props: { title: string; empty: string; children: React.ReactNode[] }) {
+function Section(props: {
+  title: string;
+  empty: string;
+  children: React.ReactNode[];
+}) {
   return (
     <div>
       <h3 className="mb-1.5 text-[11px] font-semibold tracking-wide text-zinc-500 uppercase">
@@ -357,10 +391,19 @@ function Item({ children }: { children: React.ReactNode }) {
 
 // ── Chat ──────────────────────────────────────────────────────────────
 
-function ChatMessage({ message, nameOf }: { message: UIMessage; nameOf: (id: string) => string }) {
+function ChatMessage({
+  message,
+  nameOf
+}: {
+  message: UIMessage;
+  nameOf: (id: string) => string;
+}) {
   const isUser = message.role === "user";
   const speaker = isUser
-    ? nameOf((message.metadata as { actorId?: string } | undefined)?.actorId ?? MANAGER)
+    ? nameOf(
+        (message.metadata as { actorId?: string } | undefined)?.actorId ??
+          MANAGER
+      )
     : "Assistant";
   const texts = message.parts.filter((p) => p.type === "text");
   const tools = message.parts.filter(isToolUIPart);
@@ -368,7 +411,9 @@ function ChatMessage({ message, nameOf }: { message: UIMessage; nameOf: (id: str
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className="max-w-[88%]">
-        <div className={`mb-0.5 text-[11px] text-zinc-400 ${isUser ? "text-right" : ""}`}>
+        <div
+          className={`mb-0.5 text-[11px] text-zinc-400 ${isUser ? "text-right" : ""}`}
+        >
           {speaker}
         </div>
         {tools.map((t) => (
@@ -377,7 +422,11 @@ function ChatMessage({ message, nameOf }: { message: UIMessage; nameOf: (id: str
             className="mb-1 inline-flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 dark:bg-zinc-800"
           >
             ⚙ {getToolName(t)}
-            {t.state === "output-available" ? " ✓" : t.state === "output-error" ? " ✕" : " …"}
+            {t.state === "output-available"
+              ? " ✓"
+              : t.state === "output-error"
+                ? " ✕"
+                : " …"}
           </div>
         ))}
         {texts.map((p, i) => (
@@ -400,7 +449,9 @@ function ChatMessage({ message, nameOf }: { message: UIMessage; nameOf: (id: str
 // ── App ───────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [actor, setActorRaw] = useState(() => stored("shiftswap.actor", () => "alex"));
+  const [actor, setActorRaw] = useState(() =>
+    stored("shiftswap.actor", () => "alex")
+  );
   const setActor = (a: string) => {
     setActorRaw(a);
     remember("shiftswap.actor", a);
@@ -436,7 +487,9 @@ export default function App() {
     async (fn: string, ...args: unknown[]) => {
       setError(null);
       try {
-        const r = (await agent.call(fn, args)) as { ok?: boolean; error?: string } | undefined;
+        const r = (await agent.call(fn, args)) as
+          | { ok?: boolean; error?: string }
+          | undefined;
         if (r && r.ok === false && r.error) setError(r.error);
       } catch (e) {
         setError((e as Error).message);
@@ -463,7 +516,11 @@ export default function App() {
   const suggestions = useMemo(
     () =>
       actor === MANAGER
-        ? ["Who's working this Friday?", "Who could cover Alex's Friday shift?", "Show open swap requests"]
+        ? [
+            "Who's working this Friday?",
+            "Who could cover Alex's Friday shift?",
+            "Show open swap requests"
+          ]
         : [
             "Can you find someone to trade shifts with me this Friday?",
             "I can pick up day shifts next Monday and Tuesday",
@@ -476,7 +533,10 @@ export default function App() {
     ? actor === MANAGER
       ? state.requests.filter((r) => r.status === "accepted").length
       : state.requests.filter(
-          (r) => r.status === "offered" && r.offeredTo.includes(actor) && !r.declinedBy.includes(actor)
+          (r) =>
+            r.status === "offered" &&
+            r.offeredTo.includes(actor) &&
+            !r.declinedBy.includes(actor)
         ).length
     : 0;
 
@@ -490,7 +550,9 @@ export default function App() {
           <p className="text-xs text-zinc-500">
             {state?.teamName || "Loading team…"}
             {state?.rules && ` · ${state.rules.timezone}`}
-            <span className={`ml-2 inline-block h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-zinc-400"}`} />
+            <span
+              className={`ml-2 inline-block h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-zinc-400"}`}
+            />
           </p>
         </div>
         <label className="flex items-center gap-2 text-xs">
@@ -528,12 +590,22 @@ export default function App() {
       <main className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden">
         <section className="p-4 lg:min-h-0 lg:overflow-y-auto">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold">Roster · this week and next</h2>
+            <h2 className="text-sm font-semibold">
+              Roster · this week and next
+            </h2>
             <div className="flex flex-wrap gap-3 text-[11px] text-zinc-500">
-              <span><b className="text-amber-700">D</b> day 7a-7p</span>
-              <span><b className="text-indigo-700">N</b> night 7p-7a</span>
-              <span><b className="text-emerald-600">+D</b> flex</span>
-              <span className="rounded px-1 ring-2 ring-orange-500">swapped</span>
+              <span>
+                <b className="text-amber-700">D</b> day 7a-7p
+              </span>
+              <span>
+                <b className="text-indigo-700">N</b> night 7p-7a
+              </span>
+              <span>
+                <b className="text-emerald-600">+D</b> flex
+              </span>
+              <span className="rounded px-1 ring-2 ring-orange-500">
+                swapped
+              </span>
             </div>
           </div>
           {state?.grid.rows.length ? (
@@ -542,7 +614,9 @@ export default function App() {
               actor={actor}
               onToggleFlex={(m, d, s) => call("setFlexFromUI", m, d, s)}
               onRequestCover={(m, d) => {
-                if (confirm(`Ask coworkers to cover your ${shortDate(d)} shift?`)) {
+                if (
+                  confirm(`Ask coworkers to cover your ${shortDate(d)} shift?`)
+                ) {
                   void call("requestSwapFromUI", m, d);
                 }
               }}
@@ -581,12 +655,15 @@ export default function App() {
             </div>
           )}
 
-          <div className={`min-h-0 flex-1 flex-col ${tab === "chat" ? "flex" : "hidden lg:flex"}`}>
+          <div
+            className={`min-h-0 flex-1 flex-col ${tab === "chat" ? "flex" : "hidden lg:flex"}`}
+          >
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
               {messages.length === 0 && (
                 <div className="space-y-2 pt-4 text-center">
                   <p className="text-sm text-zinc-500">
-                    Team channel. Ask the assistant as {nameOf(actor).split(" ")[0]}:
+                    Team channel. Ask the assistant as{" "}
+                    {nameOf(actor).split(" ")[0]}:
                   </p>
                   <div className="flex flex-col items-center gap-1.5">
                     {suggestions.map((s) => (
@@ -600,7 +677,9 @@ export default function App() {
               {messages.map((m) => (
                 <ChatMessage key={m.id} message={m} nameOf={nameOf} />
               ))}
-              {status === "submitted" && <p className="text-xs text-zinc-400">Thinking…</p>}
+              {status === "submitted" && (
+                <p className="text-xs text-zinc-400">Thinking…</p>
+              )}
               <div ref={endRef} />
             </div>
             <form
@@ -617,7 +696,9 @@ export default function App() {
                 className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
               {busy ? (
-                <Btn type="button" onClick={stop}>Stop</Btn>
+                <Btn type="button" onClick={stop}>
+                  Stop
+                </Btn>
               ) : (
                 <Btn type="submit" tone="primary" disabled={!input.trim()}>
                   Send

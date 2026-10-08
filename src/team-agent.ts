@@ -211,7 +211,8 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
   }
 
   setSetting(key: string, value: string): void {
-    this.sql`INSERT OR REPLACE INTO settings (key, value) VALUES (${key}, ${value})`;
+    this
+      .sql`INSERT OR REPLACE INTO settings (key, value) VALUES (${key}, ${value})`;
   }
 
   getRules(): TeamRules {
@@ -287,12 +288,18 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
       date: f.date,
       shifts: JSON.parse(f.shifts) as WorkShift[]
     }));
-    return { members: this.getMembers(), overrides, flex, rules: this.getRules() };
+    return {
+      members: this.getMembers(),
+      overrides,
+      flex,
+      rules: this.getRules()
+    };
   }
 
   setFlexAvailability(memberId: string, date: string, shifts: WorkShift[]) {
     if (shifts.length === 0) {
-      this.sql`DELETE FROM flex WHERE member_id = ${memberId} AND date = ${date}`;
+      this
+        .sql`DELETE FROM flex WHERE member_id = ${memberId} AND date = ${date}`;
     } else {
       this.sql`INSERT OR REPLACE INTO flex (member_id, date, shifts)
                VALUES (${memberId}, ${date}, ${JSON.stringify(shifts)})`;
@@ -301,7 +308,8 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
   }
 
   getRequest(id: string): SwapRequest | undefined {
-    const r = this.sql<RequestRow>`SELECT * FROM swap_requests WHERE id = ${id}`;
+    const r = this
+      .sql<RequestRow>`SELECT * FROM swap_requests WHERE id = ${id}`;
     return r[0] ? rowToRequest(r[0]) : undefined;
   }
 
@@ -316,7 +324,11 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
     id: string,
     status: SwapStatus,
     note?: string,
-    extra: { acceptorId?: string; offeredTo?: string[]; declinedBy?: string[] } = {}
+    extra: {
+      acceptorId?: string;
+      offeredTo?: string[];
+      declinedBy?: string[];
+    } = {}
   ): SwapRequest {
     const req = this.getRequest(id);
     if (!req) throw new Error("Unknown request");
@@ -367,7 +379,12 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
       members: roster.members,
       grid: rosterGrid(roster, weekStart(today), 14),
       requests: this.getRequests(),
-      notices: this.sql<{ id: string; to_id: string; text: string; at: string }>`
+      notices: this.sql<{
+        id: string;
+        to_id: string;
+        text: string;
+        at: string;
+      }>`
         SELECT * FROM notices ORDER BY at DESC LIMIT 50`.map((n) => ({
         id: n.id,
         to: n.to_id,
@@ -392,7 +409,11 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
         OPEN_STATUSES.includes(r.status)
     );
     if (open) {
-      return { ok: false as const, error: "There is already an open request for that shift.", requestId: open.id };
+      return {
+        ok: false as const,
+        error: "There is already an open request for that shift.",
+        requestId: open.id
+      };
     }
     if (search.candidates.length === 0) {
       return {
@@ -404,11 +425,15 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
 
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    this.sql`INSERT INTO swap_requests (id, requester_id, date, shift, status, note, history, created_at)
+    this
+      .sql`INSERT INTO swap_requests (id, requester_id, date, shift, status, note, history, created_at)
       VALUES (${id}, ${requesterId}, ${date}, ${search.shift}, 'searching', ${note ?? null},
               ${JSON.stringify([{ at: now, status: "searching" }])}, ${now})`;
-    const workflowId = await this.runWorkflow("SWAP_WORKFLOW", { requestId: id });
-    this.sql`UPDATE swap_requests SET workflow_id = ${workflowId} WHERE id = ${id}`;
+    const workflowId = await this.runWorkflow("SWAP_WORKFLOW", {
+      requestId: id
+    });
+    this
+      .sql`UPDATE swap_requests SET workflow_id = ${workflowId} WHERE id = ${id}`;
     this.refreshState();
     return {
       ok: true as const,
@@ -424,8 +449,11 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
     const req = this.getRequest(requestId);
     if (!req || req.status !== "searching") return [];
     try {
-      return findSwapCandidates(this.getRoster(), req.requesterId, req.date)
-        .candidates.map((c) => c.memberId);
+      return findSwapCandidates(
+        this.getRoster(),
+        req.requesterId,
+        req.date
+      ).candidates.map((c) => c.memberId);
     } catch {
       return [];
     }
@@ -438,8 +466,15 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
   async offerTo(requestId: string, memberIds: string[]): Promise<void> {
     const req = this.getRequest(requestId);
     if (!req || req.status !== "searching") return;
-    const [shiftStart] = shiftInterval(req.date, req.shift, this.getRules().timezone);
-    const expiresAt = Math.min(Date.now() + OFFER_TTL_MS, shiftStart - 2 * HOUR);
+    const [shiftStart] = shiftInterval(
+      req.date,
+      req.shift,
+      this.getRules().timezone
+    );
+    const expiresAt = Math.min(
+      Date.now() + OFFER_TTL_MS,
+      shiftStart - 2 * HOUR
+    );
     const sched = await this.schedule(
       new Date(Math.max(expiresAt, Date.now() + 60_000)),
       "expireRequest",
@@ -449,7 +484,10 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
              expires_at = ${new Date(expiresAt).toISOString()} WHERE id = ${requestId}`;
     this.setStatus(requestId, "offered", undefined, { offeredTo: memberIds });
     for (const id of memberIds) {
-      this.notify(id, `${this.describe(req)} is up for grabs. Can you take it?`);
+      this.notify(
+        id,
+        `${this.describe(req)} is up for grabs. Can you take it?`
+      );
     }
   }
 
@@ -459,20 +497,40 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
     if (!req || req.status !== "offered") {
       return { ok: false, error: "This offer is no longer open." };
     }
-    if (!req.offeredTo.includes(memberId) || req.declinedBy.includes(memberId)) {
+    if (
+      !req.offeredTo.includes(memberId) ||
+      req.declinedBy.includes(memberId)
+    ) {
       return { ok: false, error: "This offer wasn't sent to you." };
     }
-    const check = checkEligibility(this.getRoster(), memberId, req.date, req.shift);
-    if (!check.ok) return { ok: false, error: `You can't take it: ${check.reason}.` };
+    const check = checkEligibility(
+      this.getRoster(),
+      memberId,
+      req.date,
+      req.shift
+    );
+    if (!check.ok)
+      return { ok: false, error: `You can't take it: ${check.reason}.` };
 
     // Claim synchronously so a second accept that arrives right after sees
     // status "accepted" and is refused: first to accept wins.
-    this.setStatus(requestId, "accepted", `${this.actorName(memberId)} accepted`, {
-      acceptorId: memberId
-    });
+    this.setStatus(
+      requestId,
+      "accepted",
+      `${this.actorName(memberId)} accepted`,
+      {
+        acceptorId: memberId
+      }
+    );
     await this.cancelExpiry(requestId);
-    this.notify(MANAGER, `${this.actorName(memberId)} wants to take ${this.describe(req)}. Approve?`);
-    this.notify(req.requesterId, `${this.actorName(memberId)} accepted your swap. Waiting on manager approval.`);
+    this.notify(
+      MANAGER,
+      `${this.actorName(memberId)} wants to take ${this.describe(req)}. Approve?`
+    );
+    this.notify(
+      req.requesterId,
+      `${this.actorName(memberId)} accepted your swap. Waiting on manager approval.`
+    );
     await this.sendWorkflowEvent("SWAP_WORKFLOW", req.workflowId!, {
       type: "accepted",
       payload: { memberId }
@@ -483,9 +541,15 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
   @callable()
   async declineOffer(requestId: string, memberId: string) {
     const req = this.getRequest(requestId);
-    if (!req || req.status !== "offered" || !req.offeredTo.includes(memberId)) return;
+    if (!req || req.status !== "offered" || !req.offeredTo.includes(memberId))
+      return;
     const declinedBy = [...new Set([...req.declinedBy, memberId])];
-    this.setStatus(requestId, "offered", `${this.actorName(memberId)} declined`, { declinedBy });
+    this.setStatus(
+      requestId,
+      "offered",
+      `${this.actorName(memberId)} declined`,
+      { declinedBy }
+    );
     if (req.offeredTo.every((id) => declinedBy.includes(id))) {
       await this.closeRequest(requestId, "unfilled", "Everyone declined");
     }
@@ -513,12 +577,19 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
     const req = this.getRequest(requestId);
     if (!req) return { ok: false, error: "No such request." };
     if (actor !== MANAGER && actor !== req.requesterId) {
-      return { ok: false, error: "Only the requester or the manager can cancel it." };
+      return {
+        ok: false,
+        error: "Only the requester or the manager can cancel it."
+      };
     }
     if (!OPEN_STATUSES.includes(req.status)) {
       return { ok: false, error: `It is already ${req.status}.` };
     }
-    await this.closeRequest(requestId, "cancelled", `Cancelled by ${this.actorName(actor)}`);
+    await this.closeRequest(
+      requestId,
+      "cancelled",
+      `Cancelled by ${this.actorName(actor)}`
+    );
     return { ok: true };
   }
 
@@ -565,7 +636,8 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
       ?.expiry_schedule_id;
     if (id) {
       await this.cancelSchedule(id);
-      this.sql`UPDATE swap_requests SET expiry_schedule_id = NULL WHERE id = ${requestId}`;
+      this
+        .sql`UPDATE swap_requests SET expiry_schedule_id = NULL WHERE id = ${requestId}`;
     }
   }
 
@@ -582,9 +654,11 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
    */
   applySwap(requestId: string): { ok: boolean; reason: string | null } {
     const req = this.getRequest(requestId);
-    if (!req || !req.acceptorId) return { ok: false, reason: "request not found" };
+    if (!req || !req.acceptorId)
+      return { ok: false, reason: "request not found" };
     if (req.status === "approved") return { ok: true, reason: null };
-    if (req.status !== "accepted") return { ok: false, reason: `request is ${req.status}` };
+    if (req.status !== "accepted")
+      return { ok: false, reason: `request is ${req.status}` };
     const roster = this.getRoster();
     const requesterShift = roster.overrides.find(
       (o) => o.memberId === req.requesterId && o.date === req.date
@@ -593,9 +667,19 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
       return { ok: false, reason: "the shift was already given away" };
     }
     const check = checkEligibility(roster, req.acceptorId, req.date, req.shift);
-    if (!check.ok) return { ok: false, reason: `${this.actorName(req.acceptorId)} is ${check.reason}` };
-    for (const o of swapOverrides(req.requesterId, req.acceptorId, req.date, req.shift)) {
-      this.sql`INSERT OR REPLACE INTO overrides (member_id, date, shift, swap_id)
+    if (!check.ok)
+      return {
+        ok: false,
+        reason: `${this.actorName(req.acceptorId)} is ${check.reason}`
+      };
+    for (const o of swapOverrides(
+      req.requesterId,
+      req.acceptorId,
+      req.date,
+      req.shift
+    )) {
+      this
+        .sql`INSERT OR REPLACE INTO overrides (member_id, date, shift, swap_id)
                VALUES (${o.memberId}, ${o.date}, ${o.shift}, ${requestId})`;
     }
     this.setStatus(requestId, "approved", "Approved by manager");
@@ -606,7 +690,11 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
   async scheduleShiftReminder(requestId: string): Promise<string | null> {
     const req = this.getRequest(requestId);
     if (!req?.acceptorId) return null;
-    const [start] = shiftInterval(req.date, req.shift, this.getRules().timezone);
+    const [start] = shiftInterval(
+      req.date,
+      req.shift,
+      this.getRules().timezone
+    );
     const at = start - 24 * HOUR;
     if (at <= Date.now()) return null;
     const s = await this.schedule(new Date(at), "shiftReminder", { requestId });
@@ -635,7 +723,8 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
   async expireRequest(payload: { requestId: string }): Promise<void> {
     const req = this.getRequest(payload.requestId);
     if (!req || req.status !== "offered") return;
-    this.sql`UPDATE swap_requests SET expiry_schedule_id = NULL WHERE id = ${req.id}`;
+    this
+      .sql`UPDATE swap_requests SET expiry_schedule_id = NULL WHERE id = ${req.id}`;
     await this.closeRequest(req.id, "expired", "Offer expired");
   }
 
@@ -685,7 +774,8 @@ export class TeamAgent extends AIChatAgent<Env, TeamState> {
   /** Same as the requestSwap tool, from a click on your own shift. */
   @callable()
   async requestSwapFromUI(memberId: string, date: string) {
-    if (!this.getMember(memberId)) return { ok: false, error: "Unknown member." };
+    if (!this.getMember(memberId))
+      return { ok: false, error: "Unknown member." };
     try {
       const r = await this.createSwapRequest(memberId, date);
       return r.ok ? { ok: true } : { ok: false, error: r.error };

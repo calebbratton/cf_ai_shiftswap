@@ -31,7 +31,11 @@ describe("rotation patterns", () => {
 
   it("follows DuPont's 4N 3off 3D 1off 3N 3off 4D 7off", () => {
     const days = Array.from({ length: 28 }, (_, i) =>
-      patternShift("dupont", "2026-10-01", `2026-10-${String(i + 1).padStart(2, "0")}`)
+      patternShift(
+        "dupont",
+        "2026-10-01",
+        `2026-10-${String(i + 1).padStart(2, "0")}`
+      )
     ).join("");
     expect(days).toBe("NNNN---DDD-NNN---DDDD-------");
   });
@@ -52,21 +56,69 @@ describe("rotation patterns", () => {
 // A small team, looked at for Friday Oct 16 (week of Mon Oct 12).
 const members: Member[] = [
   // Works Mon-Fri (Oct 13-16) days: the requester.
-  { id: "alice", name: "Alice", role: "RN", pattern: "fourOnFourOff", anchorDate: "2026-10-13" },
+  {
+    id: "alice",
+    name: "Alice",
+    role: "RN",
+    pattern: "fourOnFourOff",
+    anchorDate: "2026-10-13"
+  },
   // Off Tue-Fri, back on Sat days (12h after Fri's day shift ends). 3 shifts that week.
-  { id: "ben", name: "Ben", role: "RN", pattern: "fourOnFourOff", anchorDate: "2026-10-17" },
+  {
+    id: "ben",
+    name: "Ben",
+    role: "RN",
+    pattern: "fourOnFourOff",
+    anchorDate: "2026-10-17"
+  },
   // Nights Mon-Thu: Thursday's night ends Friday 7a, zero rest.
-  { id: "cara", name: "Cara", role: "RN", pattern: "fourOnFourOffNights", anchorDate: "2026-10-12" },
+  {
+    id: "cara",
+    name: "Cara",
+    role: "RN",
+    pattern: "fourOnFourOffNights",
+    anchorDate: "2026-10-12"
+  },
   // Pitman: off Friday, worked Wed-Thu. Will mark flex for Friday days.
-  { id: "dev", name: "Dev", role: "RN", pattern: "pitman", anchorDate: "2026-10-05" },
+  {
+    id: "dev",
+    name: "Dev",
+    role: "RN",
+    pattern: "pitman",
+    anchorDate: "2026-10-05"
+  },
   // Off Friday but a different role.
-  { id: "eve", name: "Eve", role: "Tech", pattern: "fourOnFourOff", anchorDate: "2026-10-17" },
+  {
+    id: "eve",
+    name: "Eve",
+    role: "Tech",
+    pattern: "fourOnFourOff",
+    anchorDate: "2026-10-17"
+  },
   // Already working Friday.
-  { id: "finn", name: "Finn", role: "RN", pattern: "pitman", anchorDate: "2026-10-12" },
+  {
+    id: "finn",
+    name: "Finn",
+    role: "RN",
+    pattern: "pitman",
+    anchorDate: "2026-10-12"
+  },
   // Off Friday but already at the weekly cap (with an override on Sunday).
-  { id: "gus", name: "Gus", role: "RN", pattern: "fourOnFourOff", anchorDate: "2026-10-11" },
+  {
+    id: "gus",
+    name: "Gus",
+    role: "RN",
+    pattern: "fourOnFourOff",
+    anchorDate: "2026-10-11"
+  },
   // Nights from Saturday: 24h rest, 3 shifts that week. Ties with Ben.
-  { id: "hana", name: "Hana", role: "RN", pattern: "fourOnFourOffNights", anchorDate: "2026-10-17" }
+  {
+    id: "hana",
+    name: "Hana",
+    role: "RN",
+    pattern: "fourOnFourOffNights",
+    anchorDate: "2026-10-17"
+  }
 ];
 
 function team(overrides: Partial<Roster> = {}): Roster {
@@ -74,7 +126,11 @@ function team(overrides: Partial<Roster> = {}): Roster {
     members,
     overrides: [{ memberId: "gus", date: "2026-10-18", shift: "D" }],
     flex: [{ memberId: "dev", date: FRI, shifts: ["D"] }],
-    rules: { timezone: "America/New_York", minRestHours: 10, maxShiftsPerWeek: 4 },
+    rules: {
+      timezone: "America/New_York",
+      minRestHours: 10,
+      maxShiftsPerWeek: 4
+    },
     ...overrides
   };
 }
@@ -105,12 +161,21 @@ describe("findSwapCandidates", () => {
       "ben",
       "hana"
     ]);
-    expect(result.candidates[0]).toMatchObject({ flex: true, shiftsThisWeek: 2 });
-    expect(result.candidates[1]).toMatchObject({ flex: false, shiftsThisWeek: 3, restHours: 12 });
+    expect(result.candidates[0]).toMatchObject({
+      flex: true,
+      shiftsThisWeek: 2
+    });
+    expect(result.candidates[1]).toMatchObject({
+      flex: false,
+      shiftsThisWeek: 3,
+      restHours: 12
+    });
   });
 
   it("explains every exclusion", () => {
-    const why = Object.fromEntries(result.excluded.map((e) => [e.memberId, e.reason]));
+    const why = Object.fromEntries(
+      result.excluded.map((e) => [e.memberId, e.reason])
+    );
     expect(why.cara).toBe(
       "only 0h rest after their night (7p-7a) shift on Thu, Oct 15 (minimum 10h)"
     );
@@ -120,11 +185,18 @@ describe("findSwapCandidates", () => {
   });
 
   it("respects a stricter minimum rest", () => {
-    const r = team({ rules: { timezone: "America/New_York", minRestHours: 13, maxShiftsPerWeek: 4 } });
+    const r = team({
+      rules: {
+        timezone: "America/New_York",
+        minRestHours: 13,
+        maxShiftsPerWeek: 4
+      }
+    });
     const ben = checkEligibility(r, "ben", FRI, "D");
     expect(ben).toEqual({
       ok: false,
-      reason: "only 12h rest before their day (7a-7p) shift on Sat, Oct 17 (minimum 13h)"
+      reason:
+        "only 12h rest before their day (7a-7p) shift on Sat, Oct 17 (minimum 13h)"
     });
   });
 

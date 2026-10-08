@@ -8,9 +8,13 @@ import type { TeamAgent } from "./team-agent";
  * answer: one flex-marked coworker, a couple of other eligible people,
  * and others excluded for rest, role, and already working.
  */
-export function seedDemoTeam(agent: TeamAgent, timezone: string, today: string) {
+export function seedDemoTeam(
+  agent: TeamAgent,
+  timezone: string,
+  today: string
+) {
   // First Friday after today (a week out if today is Friday).
-  const fri = addDays(today, ((5 - weekday(today) + 7) % 7) || 7);
+  const fri = addDays(today, (5 - weekday(today) + 7) % 7 || 7);
 
   const members: {
     id: string;
@@ -20,19 +24,61 @@ export function seedDemoTeam(agent: TeamAgent, timezone: string, today: string) 
     anchor: number;
   }[] = [
     // Works Tue-Fri days: the default "you".
-    { id: "alex", name: "Alex Rivera", role: "RN", pattern: "fourOnFourOff", anchor: -3 },
+    {
+      id: "alex",
+      name: "Alex Rivera",
+      role: "RN",
+      pattern: "fourOnFourOff",
+      anchor: -3
+    },
     // Off Tue-Fri, back on Saturday days.
-    { id: "ben", name: "Ben Okafor", role: "RN", pattern: "fourOnFourOff", anchor: 1 },
+    {
+      id: "ben",
+      name: "Ben Okafor",
+      role: "RN",
+      pattern: "fourOnFourOff",
+      anchor: 1
+    },
     // Nights Mon-Thu: Thursday's night ends Friday 7a.
-    { id: "cara", name: "Cara Lindqvist", role: "RN", pattern: "fourOnFourOffNights", anchor: -4 },
+    {
+      id: "cara",
+      name: "Cara Lindqvist",
+      role: "RN",
+      pattern: "fourOnFourOffNights",
+      anchor: -4
+    },
     // Pitman, off Friday, marked flex for Friday days.
-    { id: "dev", name: "Dev Patel", role: "RN", pattern: "pitman", anchor: -11 },
+    {
+      id: "dev",
+      name: "Dev Patel",
+      role: "RN",
+      pattern: "pitman",
+      anchor: -11
+    },
     // Off Friday, but a tech, not an RN.
-    { id: "eve", name: "Eve Morales", role: "Tech", pattern: "fourOnFourOff", anchor: 1 },
+    {
+      id: "eve",
+      name: "Eve Morales",
+      role: "Tech",
+      pattern: "fourOnFourOff",
+      anchor: 1
+    },
     // Pitman, working Friday.
-    { id: "finn", name: "Finn O'Brien", role: "RN", pattern: "pitman", anchor: -4 },
+    {
+      id: "finn",
+      name: "Finn O'Brien",
+      role: "RN",
+      pattern: "pitman",
+      anchor: -4
+    },
     // Nights from Saturday.
-    { id: "hana", name: "Hana Sato", role: "RN", pattern: "fourOnFourOffNights", anchor: 1 }
+    {
+      id: "hana",
+      name: "Hana Sato",
+      role: "RN",
+      pattern: "fourOnFourOffNights",
+      anchor: 1
+    }
   ];
 
   const flex: { id: string; offset: number; shifts: WorkShift[] }[] = [

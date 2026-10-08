@@ -14,15 +14,15 @@ const iso = (ms: number) => new Date(ms).toISOString();
 
 describe("zonedTimeToUtc", () => {
   it("converts New York daylight time", () => {
-    expect(
-      iso(zonedTimeToUtc("2026-10-13", "09:00", "America/New_York"))
-    ).toBe("2026-10-13T13:00:00.000Z");
+    expect(iso(zonedTimeToUtc("2026-10-13", "09:00", "America/New_York"))).toBe(
+      "2026-10-13T13:00:00.000Z"
+    );
   });
 
   it("converts New York standard time after the fall-back", () => {
-    expect(
-      iso(zonedTimeToUtc("2026-11-02", "09:00", "America/New_York"))
-    ).toBe("2026-11-02T14:00:00.000Z");
+    expect(iso(zonedTimeToUtc("2026-11-02", "09:00", "America/New_York"))).toBe(
+      "2026-11-02T14:00:00.000Z"
+    );
   });
 
   it("handles zones east of UTC with half-hour offsets", () => {
@@ -33,16 +33,16 @@ describe("zonedTimeToUtc", () => {
 
   it("resolves a spring-forward gap to after the gap", () => {
     // 02:30 does not exist on 2026-03-08 in New York; 03:30 EDT does.
-    expect(
-      iso(zonedTimeToUtc("2026-03-08", "02:30", "America/New_York"))
-    ).toBe("2026-03-08T07:30:00.000Z");
+    expect(iso(zonedTimeToUtc("2026-03-08", "02:30", "America/New_York"))).toBe(
+      "2026-03-08T07:30:00.000Z"
+    );
   });
 
   it("resolves an ambiguous fall-back time to the earlier instant", () => {
     // 01:30 happens twice on 2026-11-01; the first is EDT (UTC-4).
-    expect(
-      iso(zonedTimeToUtc("2026-11-01", "01:30", "America/New_York"))
-    ).toBe("2026-11-01T05:30:00.000Z");
+    expect(iso(zonedTimeToUtc("2026-11-01", "01:30", "America/New_York"))).toBe(
+      "2026-11-01T05:30:00.000Z"
+    );
   });
 });
 

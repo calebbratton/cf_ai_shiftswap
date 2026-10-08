@@ -38,7 +38,8 @@ export function buildSystemPrompt(opts: {
     for (let i = 0; i < 14; i++) {
       const d = addDays(today, i);
       const s = shiftOn(roster, me.id, d);
-      if (s !== "-") lines.push(`- ${formatDate(d)} (${d}): ${SHIFT_DEFS[s].label}`);
+      if (s !== "-")
+        lines.push(`- ${formatDate(d)} (${d}): ${SHIFT_DEFS[s].label}`);
     }
     myShifts = `\n${me.name}'s shifts in the next 14 days:\n${lines.join("\n") || "- none"}\n`;
   }

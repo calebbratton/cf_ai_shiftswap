@@ -24,12 +24,19 @@ export class SwapWorkflow extends AgentWorkflow<TeamAgent, SwapParams> {
     );
     if (candidates.length === 0) {
       await step.do("close-unfilled", async () =>
-        this.agent.closeRequest(requestId, "unfilled", "No eligible coworkers", true)
+        this.agent.closeRequest(
+          requestId,
+          "unfilled",
+          "No eligible coworkers",
+          true
+        )
       );
       return { outcome: "unfilled" };
     }
 
-    await step.do("offer", async () => this.agent.offerTo(requestId, candidates));
+    await step.do("offer", async () =>
+      this.agent.offerTo(requestId, candidates)
+    );
 
     // The agent's expireRequest schedule ends the request at the real
     // deadline (and terminates this instance); this timeout is a backstop.
@@ -74,7 +81,12 @@ export class SwapWorkflow extends AgentWorkflow<TeamAgent, SwapParams> {
     });
     if (!applied.ok) {
       await step.do("close-failed", async () =>
-        this.agent.closeRequest(requestId, "failed", applied.reason ?? undefined, true)
+        this.agent.closeRequest(
+          requestId,
+          "failed",
+          applied.reason ?? undefined,
+          true
+        )
       );
       return { outcome: "failed", reason: applied.reason };
     }

@@ -197,7 +197,9 @@ export function findSwapCandidates(
   if (!requester) throw new Error("Unknown team member");
   const shift = shiftOn(roster, requesterId, date);
   if (shift === "-") {
-    throw new Error(`${requester.name} is not scheduled on ${formatDate(date)}`);
+    throw new Error(
+      `${requester.name} is not scheduled on ${formatDate(date)}`
+    );
   }
 
   const candidates: Candidate[] = [];
