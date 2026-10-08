@@ -1,6 +1,6 @@
 # cf_ai_shiftswap: AI shift-swap assistant on Cloudflare
 
-**Live demo:** _deploying, link coming shortly_
+**Live demo:** https://cf-ai-shiftswap.bratton-dev.workers.dev (no sign-in; each browser gets its own demo team)
 
 A chat assistant for shift workers (nurses, techs, anyone on a rotation). You
 mark days you'd pick up extra shifts, and when you need a day off you just ask:
@@ -20,8 +20,9 @@ who accepts, and the manager.
 ## Try it in 60 seconds
 
 1. Open the demo. You're **Alex (RN)**, who works this Friday.
-2. In the chat, click **"Can you find someone to trade shifts with me this
-   Friday?"** (or click Alex's Friday cell in the roster). The assistant offers
+2. In the chat, type **"find someone to take my friday shift"** (or use the
+   suggestion chip, the **Request cover** button, or click Alex's Friday
+   cell in the roster). The assistant offers
    the shift to Dev (marked flex for Friday, so ranked first), Ben and Hana. It
    also explains why the others were excluded: Cara would get 0h rest after her
    night shift, Eve is a Tech rather than an RN, and Finn is already working.
@@ -132,6 +133,26 @@ requestSwap tool / click on your shift
 - **Timezones and DST.** All rules run on UTC instants computed from the
   team's zone. A night shift that spans the fall-back change is 13 hours long,
   and the tests check this.
+- **Making Llama 3.3 tool calling reliable.** The first deploy answered
+  schedule questions but never completed an action. Probing Workers AI
+  directly showed three quirks, each fixed in code and documented in
+  [src/team-agent.ts](src/team-agent.ts) and
+  [src/step-policy.ts](src/step-policy.ts):
+  1. In streaming mode, each tool-argument fragment arrives twice (once
+     coerced to a number), so the arguments can't be parsed. Each step is now
+     generated whole and replayed as a stream (`simulateStreamingMiddleware`).
+  2. While tools are offered, Llama calls one on every step, even after it
+     has the result. A per-step policy withholds tools after an action tool,
+     so the next step has to be the reply. Workers AI rejects `tools: []`,
+     so a small middleware omits the field instead.
+  3. Arrays sometimes arrive as JSON strings, and dates as day names
+     ("friday"). Tool inputs accept both (`coerceList`, `resolveDate`), with
+     tests.
+
+  The prompt also tells the model never to claim success that a tool result
+  doesn't confirm. Tool and stream errors show in the chat instead of being
+  silently dropped.
+
 - **One chat per team.** The chat works like a team channel. Each user message
   carries the speaker as metadata and is prefixed `[Name]` for the model.
   Tools act as that person: members only for themselves, while the manager can

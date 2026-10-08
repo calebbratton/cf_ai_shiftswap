@@ -375,3 +375,44 @@ relayed as:
 
 **Produced:** deployment kept to Free-plan features only (SQLite Durable
 Objects, Workflows, Workers AI free allowance), noted in the README.
+
+## 6. workers.dev subdomain
+
+Caleb picked the subdomain in the thread and registered it in the Cloudflare
+dashboard: registering it from the terminal was blocked by a permission
+check. He ran `npm run deploy` himself, answering wrangler's subdomain
+prompt. The account's subdomain ended up as `bratton-dev`.
+
+**Produced:** the first live deploy at
+https://cf-ai-shiftswap.bratton-dev.workers.dev.
+
+## 7. Debugging the silent chat
+
+Caleb: "the assistant doesnt do anything". Then, relayed:
+
+> Caleb's exact repro on the live site: acting as Alex he told the agent
+> "find someone to take my friday shift"; acting as Cara he told it he's
+> willing to work Friday day shift. Neither did anything visible (no reply,
+> no offer, no flex saved). Reproduce exactly those two messages, find the
+> cause, fix and redeploy.
+
+> Narrowed by Caleb: on the live site the chat answers schedule questions
+> (getSchedule works) but never acts on trades [...] resolve weekday names
+> to ISO dates in code, accept them in the tool schema [...] surface tool
+> errors in the chat instead of silence, and also add simple UI buttons
+> (Request cover on a shift, Mark me available for a day) that hit the same
+> agent methods, so the demo works even if the model misfires.
+
+**Produced:** the fix commit `Fix silent chat: work around Llama 3.3
+tool-calling quirks on Workers AI`. The cause was found by calling the
+model directly with `getPlatformProxy` and comparing streaming and
+non-streaming tool calls (details in the README's design notes). The commit
+adds:
+
+- the simulated-streaming and step-policy fixes;
+- `resolveDate` and `coerceList` with tests (37 tests total);
+- visible errors in the chat;
+- a rest-rule warning when flex availability can't be offered;
+- Request cover / Mark me available buttons.
+
+Verified on the live site with both exact messages, plus accept → approve.
