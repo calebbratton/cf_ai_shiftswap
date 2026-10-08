@@ -15,11 +15,27 @@ descriptions in [src/tools.ts](src/tools.ts).
 
 ## 1. Original request and build plan
 
-Caleb asked for a plan for the Cloudflare AI app assignment (an AI-powered
-app on Cloudflare with an LLM, workflow/coordination, user input via chat or
-voice, and memory/state, in a repo prefixed `cf_ai_`). The plan below
-(`AI_SCHEDULER_PLAN.md`) came out of that conversation and was the first input
-to the build.
+Caleb's message that started the build, with the plan attached:
+
+> alright big dog. heres the plan. i am gonna apply for a role at cloudflare
+> and they ask for an application built on their agents platform. they say:
+> "We plan to fast track candidates who complete an assignment to build a type
+> of AI-powered application on Cloudflare. An AI-powered application should
+> include the following components:
+>
+> - LLM (recommend using Llama 3.3 on Workers AI), or an external LLM of your choice
+> - Workflow / coordination (recommend using Workflows, Workers or Durable Objects)
+> - User input via chat or voice (recommend using Pages or Realtime)
+> - Memory or state
+>
+> Find additional documentation here. Note: AI-assisted coding is encouraged,
+> but you have to submit prompt history.".
+> here are the details ive come up with to do it: [AI_SCHEDULER_PLAN.md]
+
+Follow-ups in the same thread: "can you now read the api docs?" (the SDK APIs
+were then checked against the installed packages' type definitions and bundled
+docs, see section 2) and "why cloud side you should be working on my mac
+session" (the build moved to his Mac).
 
 **Produced:** the spec for a meeting-scheduling agent.
 
@@ -346,6 +362,9 @@ login` now from the project folder (in the background if it blocks). It opens
 attempt's OAuth callback port was busy).
 
 ## 5. Cost guardrail
+
+Caleb: "dont do anything that will cost me money without my approval plz",
+relayed as:
 
 > Caleb: nothing that costs money without his approval. Stay on the Cloudflare
 > Workers Free plan: do not upgrade to Workers Paid, add a payment method, buy
